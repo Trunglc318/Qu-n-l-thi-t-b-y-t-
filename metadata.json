@@ -1,6 +1,0 @@
-{
-  "name": "Quản Lý Thiết Bị Y Tế",
-  "description": "Hệ thống quản lý trang thiết bị y tế, sạc pin định kỳ, lý lịch bảo trì, và xuất báo cáo tự động cho Bệnh viện Đa khoa Bảo Thắng.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
