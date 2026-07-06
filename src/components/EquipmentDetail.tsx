@@ -15,6 +15,7 @@ interface EquipmentDetailProps {
   onCharge: (id: string) => void;
   onOpenMaintenanceForm: (id: string) => void;
   onDelete?: (id: string) => void;
+  onUpdateEquipment: (equipment: Equipment) => void;
 }
 
 export default function EquipmentDetail({
@@ -26,9 +27,67 @@ export default function EquipmentDetail({
   onStopUse,
   onCharge,
   onOpenMaintenanceForm,
-  onDelete
+  onDelete,
+  onUpdateEquipment
 }: EquipmentDetailProps) {
   const [activeTab, setActiveTab] = useState<'info' | 'maintenance' | 'usage'>('info');
+
+  // Inspection states
+  const [isEditingInspection, setIsEditingInspection] = useState(false);
+  const [tempInspectionDate, setTempInspectionDate] = useState(equipment.nextInspectionDate || '');
+
+  // Log edit states
+  const [editingLogId, setEditingLogId] = useState<string | null>(null);
+  const [editLogStartTime, setEditLogStartTime] = useState<string>('');
+  const [editLogEndTime, setEditLogEndTime] = useState<string>('');
+  const [editLogUser, setEditLogUser] = useState<string>('');
+
+  const formatIsoToDatetimeLocal = (isoStr?: string) => {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const handleSaveEditLog = (logId: string) => {
+    const updatedLogs = equipment.usageLogs.map(log => {
+      if (log.id === logId) {
+        const startIso = new Date(editLogStartTime).toISOString();
+        const endIso = editLogEndTime ? new Date(editLogEndTime).toISOString() : undefined;
+        let durationMin = undefined;
+        if (endIso) {
+          const diffMs = new Date(endIso).getTime() - new Date(startIso).getTime();
+          durationMin = Math.max(0, Math.round(diffMs / 60000));
+        }
+        return {
+          ...log,
+          user: editLogUser.trim(),
+          startTime: startIso,
+          endTime: endIso,
+          durationMinutes: durationMin
+        };
+      }
+      return log;
+    });
+
+    const totalMinutes = updatedLogs.reduce((sum, log) => {
+      return sum + (log.durationMinutes || 0);
+    }, 0);
+
+    const activeLog = updatedLogs.find(log => !log.endTime);
+    const currentUsageStart = activeLog ? activeLog.startTime : undefined;
+    const currentUser = activeLog ? activeLog.user : undefined;
+
+    onUpdateEquipment({
+      ...equipment,
+      currentUser,
+      currentUsageStart,
+      totalUsageMinutes: totalMinutes,
+      usageLogs: updatedLogs
+    });
+
+    setEditingLogId(null);
+  };
 
   const formattedTotalHours = (equipment.totalUsageMinutes / 60).toFixed(1);
 
@@ -210,6 +269,62 @@ export default function EquipmentDetail({
                     <div className="pt-2 border-t border-slate-50">
                       <span className="text-slate-400 block">Kế hoạch bảo trì tiếp theo</span>
                       <strong className="text-slate-800 mt-1 block">{equipment.nextMaintenanceDate}</strong>
+                    </div>
+                    <div className="pt-2 border-t border-slate-50 col-span-2">
+                      <span className="text-slate-400 block font-bold text-indigo-700">Lịch nhắc kiểm định thiết bị</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        {isEditingInspection ? (
+                          <div className="flex items-center gap-2 w-full mt-1 bg-indigo-50/50 p-2 rounded border border-indigo-100">
+                            <input
+                              type="date"
+                              value={tempInspectionDate}
+                              onChange={(e) => setTempInspectionDate(e.target.value)}
+                              className="bg-white border border-slate-200 rounded p-1 text-xs font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onUpdateEquipment({
+                                  ...equipment,
+                                  nextInspectionDate: tempInspectionDate,
+                                  lastInspectionDate: new Date().toISOString().split('T')[0]
+                                });
+                                setIsEditingInspection(false);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 py-1.5 rounded text-[11px] font-bold cursor-pointer"
+                            >
+                              Lưu lịch
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setIsEditingInspection(false)}
+                              className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2.5 py-1.5 rounded text-[11px] font-bold cursor-pointer"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <strong className={`block text-xs ${
+                              equipment.nextInspectionDate && new Date(equipment.nextInspectionDate) < new Date()
+                                ? 'text-red-600 font-extrabold animate-pulse'
+                                : 'text-slate-800'
+                            }`}>
+                              {equipment.nextInspectionDate || 'Chưa lập lịch'} {equipment.nextInspectionDate && new Date(equipment.nextInspectionDate) < new Date() && '(Quá hạn kiểm định!)'}
+                            </strong>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTempInspectionDate(equipment.nextInspectionDate || new Date().toISOString().split('T')[0]);
+                                setIsEditingInspection(true);
+                              }}
+                              className="text-[11px] text-indigo-600 hover:text-indigo-800 font-bold hover:underline cursor-pointer ml-auto bg-indigo-50 px-2 py-1 rounded"
+                            >
+                              Cập nhật lịch
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -411,23 +526,89 @@ export default function EquipmentDetail({
                         <th className="p-3">Thời điểm bắt đầu</th>
                         <th className="p-3">Thời điểm kết thúc</th>
                         <th className="p-3 text-right">Tổng giờ dùng</th>
+                        <th className="p-3 text-center">Thao tác</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 text-slate-700">
-                      {equipment.usageLogs.map((log) => (
-                        <tr key={log.id} className="hover:bg-slate-50/50">
-                          <td className="p-3 font-semibold text-slate-900">{log.user}</td>
-                          <td className="p-3 font-mono">{new Date(log.startTime).toLocaleString('vi-VN')}</td>
-                          <td className="p-3 font-mono">
-                            {log.endTime ? new Date(log.endTime).toLocaleString('vi-VN') : (
-                              <span className="text-blue-600 font-bold animate-pulse">Đang dùng...</span>
-                            )}
-                          </td>
-                          <td className="p-3 text-right font-bold">
-                            {log.durationMinutes ? `${(log.durationMinutes / 60).toFixed(1)} h` : '-'}
-                          </td>
-                        </tr>
-                      ))}
+                      {equipment.usageLogs.map((log) => {
+                        const isEditing = editingLogId === log.id;
+                        return isEditing ? (
+                          <tr key={log.id} className="bg-indigo-50/40">
+                            <td className="p-2">
+                              <input
+                                type="text"
+                                value={editLogUser}
+                                onChange={(e) => setEditLogUser(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-semibold focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                placeholder="Người bàn giao"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="datetime-local"
+                                value={editLogStartTime}
+                                onChange={(e) => setEditLogStartTime(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-mono focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <input
+                                type="datetime-local"
+                                value={editLogEndTime}
+                                onChange={(e) => setEditLogEndTime(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded p-1.5 text-xs font-mono focus:ring-1 focus:ring-indigo-500 text-slate-800"
+                                placeholder="Chưa nghiệm thu"
+                              />
+                            </td>
+                            <td className="p-2 text-right font-bold text-slate-500">-</td>
+                            <td className="p-2 text-center">
+                              <div className="flex gap-1 justify-center">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveEditLog(log.id)}
+                                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded text-[10px] font-bold cursor-pointer"
+                                >
+                                  Lưu
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingLogId(null)}
+                                  className="bg-slate-200 hover:bg-slate-300 text-slate-700 px-2 py-1 rounded text-[10px] font-bold cursor-pointer"
+                                >
+                                  Hủy
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={log.id} className="hover:bg-slate-50/50">
+                            <td className="p-3 font-semibold text-slate-900">{log.user}</td>
+                            <td className="p-3 font-mono">{new Date(log.startTime).toLocaleString('vi-VN')}</td>
+                            <td className="p-3 font-mono">
+                              {log.endTime ? new Date(log.endTime).toLocaleString('vi-VN') : (
+                                <span className="text-blue-600 font-bold animate-pulse">Đang dùng...</span>
+                              )}
+                            </td>
+                            <td className="p-3 text-right font-bold">
+                              {log.durationMinutes ? `${(log.durationMinutes / 60).toFixed(1)} h` : '-'}
+                            </td>
+                            <td className="p-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingLogId(log.id);
+                                  setEditLogUser(log.user);
+                                  setEditLogStartTime(formatIsoToDatetimeLocal(log.startTime));
+                                  setEditLogEndTime(formatIsoToDatetimeLocal(log.endTime));
+                                }}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold hover:underline cursor-pointer bg-indigo-50 px-2 py-0.5 rounded"
+                              >
+                                Sửa giờ
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
