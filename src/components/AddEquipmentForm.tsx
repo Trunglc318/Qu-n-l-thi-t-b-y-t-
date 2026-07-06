@@ -14,9 +14,19 @@ export default function AddEquipmentForm({ onClose, onSubmit, departments }: Add
   const [serial, setSerial] = useState('');
   const [manufactureDate, setManufactureDate] = useState('2025-01-10');
   const [firstUseDate, setFirstUseDate] = useState('2025-03-15');
+  const [nextInspectionDate, setNextInspectionDate] = useState('2026-03-15');
   const [status, setStatus] = useState<EquipmentStatus>('Ready');
   const [batteryLevel, setBatteryLevel] = useState<number>(100);
   const [department, setDepartment] = useState<string>(departments[0]?.name || '');
+
+  const handleFirstUseDateChange = (val: string) => {
+    setFirstUseDate(val);
+    try {
+      const d = new Date(val);
+      d.setFullYear(d.getFullYear() + 1);
+      setNextInspectionDate(d.toISOString().split('T')[0]);
+    } catch(e) {}
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,6 +56,8 @@ export default function AddEquipmentForm({ onClose, onSubmit, departments }: Add
       lastChargedDate,
       nextChargeDueDate,
       nextMaintenanceDate,
+      lastInspectionDate: firstUseDate,
+      nextInspectionDate,
       totalUsageMinutes: 0,
       maintenanceLogs: [],
       usageLogs: [],
@@ -137,10 +149,23 @@ export default function AddEquipmentForm({ onClose, onSubmit, departments }: Add
                 type="date"
                 required
                 value={firstUseDate}
-                onChange={(e) => setFirstUseDate(e.target.value)}
+                onChange={(e) => handleFirstUseDateChange(e.target.value)}
                 className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-slate-800"
               />
             </div>
+          </div>
+
+          {/* Inspection Date */}
+          <div>
+            <label className="block text-slate-600 font-bold uppercase tracking-wider mb-1.5">Hạn kiểm định định kỳ tiếp theo (nhắc lịch)</label>
+            <input
+              id="input-add-inspection"
+              type="date"
+              required
+              value={nextInspectionDate}
+              onChange={(e) => setNextInspectionDate(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-slate-800 font-mono font-bold"
+            />
           </div>
 
           {/* Status & Battery */}
