@@ -253,6 +253,7 @@ export async function loadDepartmentsFromFirestore(): Promise<Department[]> {
         await setDoc(doc(db, DEPARTMENTS_COLL, id), dept);
         list.push(dept);
       }
+      localStorage.setItem('bvt_departments', JSON.stringify(list));
       return list;
     }
 
@@ -260,10 +261,21 @@ export async function loadDepartmentsFromFirestore(): Promise<Department[]> {
     snapshot.forEach(docSnap => {
       list.push(docSnap.data() as Department);
     });
+    localStorage.setItem('bvt_departments', JSON.stringify(list));
     return list;
   } catch (error) {
     console.error('[Firebase] Error loading departments:', error);
-    return DEPARTMENTS.map((name, index) => ({ id: `DEP-${index}`, name }));
+    const localDeptsStr = localStorage.getItem('bvt_departments');
+    if (localDeptsStr) {
+      try {
+        return JSON.parse(localDeptsStr);
+      } catch (e) {
+        // Parse error, proceed to default fallback
+      }
+    }
+    const fallback = DEPARTMENTS.map((name, index) => ({ id: `DEP-${index}`, name }));
+    localStorage.setItem('bvt_departments', JSON.stringify(fallback));
+    return fallback;
   }
 }
 
@@ -278,6 +290,19 @@ export async function saveDepartmentToFirestore(dept: Department): Promise<void>
   } catch (error) {
     console.error(`[Firebase] Error saving department ${dept.id}:`, error);
   }
+  try {
+    const localDeptsStr = localStorage.getItem('bvt_departments');
+    let localDepts: Department[] = localDeptsStr ? JSON.parse(localDeptsStr) : [];
+    const index = localDepts.findIndex(d => d.id === dept.id);
+    if (index >= 0) {
+      localDepts[index] = dept;
+    } else {
+      localDepts.push(dept);
+    }
+    localStorage.setItem('bvt_departments', JSON.stringify(localDepts));
+  } catch (e) {
+    console.error('[Local] Error saving department to localStorage:', e);
+  }
 }
 
 /**
@@ -290,5 +315,15 @@ export async function deleteDepartmentFromFirestore(id: string): Promise<void> {
     console.log(`[Firebase] Deleted department ${id}`);
   } catch (error) {
     console.error(`[Firebase] Error deleting department ${id}:`, error);
+  }
+  try {
+    const localDeptsStr = localStorage.getItem('bvt_departments');
+    if (localDeptsStr) {
+      let localDepts: Department[] = JSON.parse(localDeptsStr);
+      localDepts = localDepts.filter(d => d.id !== id);
+      localStorage.setItem('bvt_departments', JSON.stringify(localDepts));
+    }
+  } catch (e) {
+    console.error('[Local] Error deleting department from localStorage:', e);
   }
 }
