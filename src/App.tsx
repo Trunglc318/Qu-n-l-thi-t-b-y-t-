@@ -29,6 +29,7 @@ import NotificationCenter from './components/NotificationCenter';
 import AddEquipmentForm from './components/AddEquipmentForm';
 import Login from './components/Login';
 import UserManagement from './components/UserManagement';
+import QRScannerCamera from './components/QRScannerCamera';
 
 import { 
   Bell, User, ShieldCheck, HelpCircle, FileText, Download, QrCode, Sparkles, Check, Info, AlertTriangle, X, LogOut
@@ -70,6 +71,7 @@ export default function App() {
   const [showMaintenanceFormId, setShowMaintenanceFormId] = useState<string | null>(null);
   const [showNotificationPanel, setShowNotificationPanel] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [scannerMode, setScannerMode] = useState<'camera' | 'simulator'>('camera');
 
   // Toast / System alerting state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'warning' | 'info' } | null>(null);
@@ -125,6 +127,49 @@ export default function App() {
     }
     loadAllData();
   }, []);
+
+  // Automated checker for inspection reminders ("kiểm định")
+  useEffect(() => {
+    if (loading || equipmentList.length === 0) return;
+
+    const checkOverdues = () => {
+      const today = new Date();
+      equipmentList.forEach(eq => {
+        if (eq.nextInspectionDate) {
+          const inspDate = new Date(eq.nextInspectionDate);
+          if (inspDate < today) {
+            // Check if we already have an active/unread inspection notification for this equipment
+            const alreadyNotified = notifications.some(
+              n => n.equipmentId === eq.id && n.type === 'inspection' && !n.read
+            );
+
+            if (!alreadyNotified) {
+              const newNotif: AppNotification = {
+                id: `N-INSP-${eq.id}-${Date.now()}`,
+                title: 'Hạn nhắc lịch kiểm định',
+                message: `Thiết bị ${eq.name} (${eq.id}) quá hạn kiểm định định kỳ y tế từ ngày ${eq.nextInspectionDate}. Vui lòng sắp xếp lịch hiệu chuẩn.`,
+                type: 'inspection',
+                equipmentId: eq.id,
+                createdAt: new Date().toISOString(),
+                read: false
+              };
+
+              setNotifications(prev => {
+                const nextNotifs = [newNotif, ...prev];
+                saveNotificationToFirestore(newNotif);
+                return nextNotifs;
+              });
+              addSystemLog(`[Kiểm định] Thiết bị ${eq.id} quá hạn kiểm định.`);
+            }
+          }
+        }
+      });
+    };
+
+    checkOverdues();
+    const interval = setInterval(checkOverdues, 30000); // Check every 30 seconds
+    return () => clearInterval(interval);
+  }, [loading, equipmentList.length, notifications.length]);
 
   const handleAddDepartment = async (name: string) => {
     const id = `DEP-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -705,6 +750,11 @@ export default function App() {
           onCharge={handleChargeDevice}
           onOpenMaintenanceForm={(id) => setShowMaintenanceFormId(id)}
           onDelete={handleDeleteEquipment}
+          onUpdateEquipment={(updatedEq) => {
+            setEquipmentList(prev => prev.map(eq => eq.id === updatedEq.id ? updatedEq : eq));
+            saveEquipmentToFirestore(updatedEq);
+            showToast(`Đã cập nhật dữ liệu máy ${updatedEq.id} thành công!`, 'success');
+          }}
         />
       )}
 
@@ -738,47 +788,100 @@ export default function App() {
         />
       )}
 
-      {/* Universal QR Code scan Simulator Modal */}
+      {/* Universal QR Code scan Simulator/Camera Modal */}
       {showQRScanner && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-sm rounded-2xl shadow-xl overflow-hidden p-6 text-center space-y-4">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-3 mb-2">
-              <span className="text-xs font-bold text-slate-800">Quét mã QR thiết bị</span>
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden p-6 text-center space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <QrCode size={18} className="text-indigo-600" />
+                Quét mã QR thiết bị
+              </span>
               <button 
                 id="btn-close-scanner"
                 onClick={() => setShowQRScanner(false)} 
-                className="p-1 hover:bg-slate-100 rounded-full cursor-pointer"
+                className="p-1 hover:bg-slate-100 rounded-full cursor-pointer transition-colors text-slate-400 hover:text-slate-600"
               >
-                <X size={16} />
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Mode Selector Tabs */}
+            <div className="flex bg-slate-100 p-1 rounded-lg text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setScannerMode('camera')}
+                className={`flex-1 py-1.5 rounded-md transition-all cursor-pointer ${
+                  scannerMode === 'camera' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Quét qua Camera điện thoại
+              </button>
+              <button
+                type="button"
+                onClick={() => setScannerMode('simulator')}
+                className={`flex-1 py-1.5 rounded-md transition-all cursor-pointer ${
+                  scannerMode === 'simulator' ? 'bg-white text-indigo-700 shadow-xs' : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Chọn máy giả lập nhanh
               </button>
             </div>
             
-            <p className="text-xs text-slate-500 leading-relaxed">
-              Vui lòng chọn thiết bị dưới đây để giả lập hành vi quét nhãn QR vật lý trên thiết bị y tế:
-            </p>
-
-            <div className="space-y-2 text-left">
-              {equipmentList.map(eq => (
-                <button
-                  key={eq.id}
-                  id={`btn-scan-simulate-${eq.id}`}
-                  onClick={() => {
-                    setSelectedEqId(eq.id);
-                    setShowQRScanner(false);
-                    showToast(`Quét thành công máy ${eq.id}`, 'success');
+            {scannerMode === 'camera' ? (
+              <div className="space-y-3">
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Đưa camera điện thoại về phía nhãn QR code in sẵn trên thiết bị y tế Bảo Thắng để đọc lý lịch vận hành.
+                </p>
+                <QRScannerCamera
+                  onScanSuccess={(decodedText) => {
+                    // Try parsing the custom format (EQ_TRACK_BVT:ID) or fall back to plain ID
+                    const match = decodedText.match(/EQ_TRACK_BVT:([^|]+)/);
+                    const eqId = match ? match[1] : decodedText;
+                    
+                    // Match with our equipment list
+                    const found = equipmentList.find(e => e.id.toLowerCase() === eqId.trim().toLowerCase());
+                    if (found) {
+                      setSelectedEqId(found.id);
+                      setShowQRScanner(false);
+                      showToast(`Quét thành công: ${found.name}`, 'success');
+                    } else {
+                      showToast(`Không tìm thấy mã máy "${eqId}" trong hệ thống!`, 'warning');
+                    }
                   }}
-                  className="w-full bg-slate-50 hover:bg-slate-100 p-2.5 rounded-lg border border-slate-200 hover:border-slate-300 text-xs text-left flex justify-between items-center transition-all cursor-pointer font-medium"
-                >
-                  <span className="truncate max-w-[200px]">{eq.name}</span>
-                  <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
-                    {eq.id}
-                  </span>
-                </button>
-              ))}
-            </div>
+                  onClose={() => setShowQRScanner(false)}
+                />
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <p className="text-[11px] text-slate-500 leading-relaxed">
+                  Giả lập hành vi quét thành công một thiết bị trong cơ sở dữ liệu:
+                </p>
 
-            <div className="bg-slate-50 p-3 rounded-lg text-[10px] text-slate-400 font-medium">
-              NHÀ MÁY / KHOA PHÒNG BỆNH VIỆN BẢO THẮNG
+                <div className="space-y-1.5 text-left max-h-[40vh] overflow-y-auto pr-1">
+                  {equipmentList.map(eq => (
+                    <button
+                      key={eq.id}
+                      id={`btn-scan-simulate-${eq.id}`}
+                      onClick={() => {
+                        setSelectedEqId(eq.id);
+                        setShowQRScanner(false);
+                        showToast(`Quét thành công máy ${eq.id}`, 'success');
+                      }}
+                      className="w-full bg-slate-50 hover:bg-slate-100 p-2.5 rounded-xl border border-slate-200 hover:border-slate-300 text-xs text-left flex justify-between items-center transition-all cursor-pointer font-medium"
+                    >
+                      <span className="truncate max-w-[220px]">{eq.name}</span>
+                      <span className="font-mono text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">
+                        {eq.id}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="bg-slate-50 p-2.5 rounded-xl text-[10px] text-slate-400 font-medium">
+              BỆNH VIỆN ĐA KHOA HUYỆN BẢO THẮNG • PHÒNG VẬT TƯ
             </div>
           </div>
         </div>
