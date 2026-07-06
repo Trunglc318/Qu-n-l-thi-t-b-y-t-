@@ -33,6 +33,8 @@ export interface Equipment {
   lastChargedDate: string; // Ngày sạc pin gần nhất
   nextChargeDueDate: string; // Ngày cần sạc pin tiếp theo (nhắc nhở sạc sạc pin 1 lần / tháng)
   nextMaintenanceDate: string; // Ngày bảo trì định kỳ tiếp theo
+  lastInspectionDate?: string; // Ngày kiểm định gần nhất
+  nextInspectionDate?: string; // Ngày kiểm định tiếp theo (nhắc lịch kiểm định)
   currentUser?: string; // Người sử dụng hiện tại (nếu đang InUse)
   currentUsageStart?: string; // Thời gian bắt đầu sử dụng hiện tại
   totalUsageMinutes: number; // Tổng thời gian sử dụng (phút)
@@ -64,7 +66,7 @@ export interface AppNotification {
   id: string;
   title: string;
   message: string;
-  type: 'battery' | 'maintenance' | 'system' | 'usage';
+  type: 'battery' | 'maintenance' | 'system' | 'usage' | 'inspection';
   equipmentId?: string;
   createdAt: string;
   read: boolean;
