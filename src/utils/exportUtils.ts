@@ -5,11 +5,12 @@ import { Equipment } from '../types';
  * Exports equipment data to a CSV file readable directly in Microsoft Excel with full Vietnamese support.
  */
 export function exportToExcel(equipmentList: Equipment[]) {
-  // Column Headers
+  // Column Headers - fully detailed separate cells
   const headers = [
     'Mã thiết bị',
     'Tên thiết bị',
     'Số seri',
+    'Khoa lâm sàng trực thuộc',
     'Ngày sản xuất',
     'Ngày đưa vào sử dụng',
     'Tình trạng',
@@ -17,6 +18,7 @@ export function exportToExcel(equipmentList: Equipment[]) {
     'Ngày sạc gần nhất',
     'Ngày cần sạc tiếp theo',
     'Ngày bảo trì tiếp theo',
+    'Ngày kiểm định tiếp theo',
     'Tổng thời gian sử dụng (phút)',
     'Người sử dụng hiện tại'
   ];
@@ -37,6 +39,7 @@ export function exportToExcel(equipmentList: Equipment[]) {
       eq.id,
       eq.name,
       eq.serial,
+      eq.department || 'Chưa phân khoa',
       eq.manufactureDate,
       eq.firstUseDate,
       statusVi,
@@ -44,16 +47,19 @@ export function exportToExcel(equipmentList: Equipment[]) {
       eq.lastChargedDate,
       eq.nextChargeDueDate,
       eq.nextMaintenanceDate,
+      eq.nextInspectionDate || 'Chưa lập lịch',
       eq.totalUsageMinutes,
       eq.currentUser || 'Không có'
     ];
   });
 
   // Convert array to CSV string
+  // 'sep=,' forces MS Excel to open and parse the comma separator on all international systems instantly
   const csvContent = [
+    'sep=,',
     headers.join(','),
     ...rows.map(row => row.map(val => {
-      // Escape commas and double quotes
+      // Escape commas and double quotes to prevent column leaking
       const stringVal = String(val ?? '');
       if (stringVal.includes(',') || stringVal.includes('"') || stringVal.includes('\n')) {
         return `"${stringVal.replace(/"/g, '""')}"`;
